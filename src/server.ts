@@ -10,12 +10,24 @@ import {
   type StreamTextOnFinishCallback,
   type ToolSet,
 } from "ai";
-import { openai } from "@ai-sdk/openai";
+
+interface Env {
+  AI: any;
+}
+// import { openai } from "@ai-sdk/openai";
+
+import { createWorkersAI } from "workers-ai-provider";
+
 import { processToolCalls } from "./utils";
 import { tools, executions } from "./tools";
 // import { env } from "cloudflare:workers";
 
-const model = openai("gpt-4o-2024-11-20");
+// const model = openai("gpt-4o-2024-11-20");
+
+// Alternative AI
+const workersai = createWorkersAI({ binding: env.AI });
+const model = workersai("@cf/deepseek-ai/deepseek-r1-distill-qwen-32b");
+
 // Cloudflare AI Gateway
 // const openai = createOpenAI({
 //   apiKey: env.OPENAI_API_KEY,
@@ -35,9 +47,7 @@ export class Chat extends AIChatAgent<Env> {
     onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: { abortSignal?: AbortSignal }
   ) {
-    // const mcpConnection = await this.mcp.connect(
-    //   "https://path-to-mcp-server/sse"
-    // );
+    const mcpConnection = await this.mcp.connect("http://localhost:8787/sse");
 
     // Collect all tools, including MCP tools
     const allTools = {
@@ -72,7 +82,7 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
             onFinish(
               args as Parameters<StreamTextOnFinishCallback<ToolSet>>[0]
             );
-            // await this.mcp.closeConnection(mcpConnection.id);
+            await this.mcp.closeConnection(mcpConnection.id);
           },
           onError: (error) => {
             console.error("Error while streaming:", error);

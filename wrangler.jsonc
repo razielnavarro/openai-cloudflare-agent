@@ -32,7 +32,12 @@
 	],
 	"observability": {
 		"enabled": true
-	}
+	},
+	// rest of file
+	"ai": {
+		"binding": "AI"
+	  }
+	// rest of file
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
