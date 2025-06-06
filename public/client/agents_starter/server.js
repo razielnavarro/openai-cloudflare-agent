@@ -17596,11 +17596,12 @@ const executions = {
 globalThis.process = _process;
 globalThis.console = workerdConsole;
 class Chat extends AIChatAgent {
-  /**
-   * Handles incoming chat messages and manages the response stream
-   * @param onFinish - Callback function executed when streaming completes
-   */
   async onChatMessage(onFinish, options) {
+    const myId = this.name;
+    console.log(
+      "🔑 Chat.onChatMessage() — Durable Object instance name (userId):",
+      myId
+    );
     const workersai = createWorkersAI({ binding: this.env.AI });
     const model = workersai("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
     if (!process.env.MCP_SERVER_URL) {
@@ -17615,10 +17616,48 @@ class Chat extends AIChatAgent {
       const suffix = fullName.split("_").slice(1).join("_");
       aliasedTools[suffix] = mcpTools[fullName];
     }
-    const allTools = {
-      // ...tools,
-      ...aliasedTools
-    };
+    const allTools = { ...aliasedTools };
+    const systemPrompt = `
+You are a friendly supermarket assistant. The userId for this session is exactly "${myId}". Always use "${myId}" whenever you call any cart‐related tool.
+
+If the user asks a general inventory question (“What items are available?” or “How much does a banana cost?”), reply in plain English.
+
+If the user asks anything cart‐related (“What’s in my cart?”, “Add X apples to my cart”, “Remove Y bananas from my cart”, or “Checkout”), immediately emit the correct JSON tool invocation—always using "userId":"${myId}". For example:
+
+• “What items do I have in my cart?” →  
+  <tool name="viewCart">
+  {"schema":{"userId":"${myId}"}}
+  </tool>
+  (Then, after you see the JSON array, respond in plain English.)
+
+• “Add 2 apples and 1 candy bar to my cart” →  
+  <tool name="addMultipleToCart">
+  {"schema":{"userId":"${myId}","items":[{"id":"apple","quantity":2},{"id":"candy","quantity":1}]}}
+  </tool>
+  (Then reply: “Your items have been successfully added to your cart.”)
+
+• “Remove 3 apples from my cart” →  
+  <tool name="viewCart">
+  {"schema":{"userId":"${myId}"}}
+  </tool>
+  (Wait for the viewCart JSON, check if apples ≥ 3, then either:)  
+    ○ If yes:  
+      <tool name="removeFromCart">
+      {"schema":{"userId":"${myId}","itemId":"apple","quantity":3}}
+      </tool>  
+      → “Three apples have been removed—here’s your updated cart.”  
+    ○ If no:  
+      → “You only have X apples in your cart, so you cannot remove 3.”
+
+• “Checkout” →  
+  <tool name="checkout">
+  {"schema":{"userId":"${myId}"}}
+  </tool>  
+  → “Your order has been placed. Thank you!”
+
+Never ask the user to re-enter their userId. You already know it is “${myId}.” If at any point the user says “My userId changed to YYY,” accept YYY as the new userId and use it going forward. Always remain friendly, concise, and accurate.
+`;
+    console.log("📝 Full systemPrompt (with userId injected):\n", systemPrompt);
     const dataStreamResponse = createDataStreamResponse({
       execute: async (dataStream) => {
         const processedMessages = await processToolCalls({
@@ -17628,61 +17667,7 @@ class Chat extends AIChatAgent {
         });
         const result = streamText({
           model,
-          system: `
-You are a helpful supermarket assistant. Each user may ask about inventory (items in stock) or perform cart operations (view cart, add items, remove items, checkout). Only cart operations require a userId—inventory queries do not.
-
-If the user asks anything that involves a cart tool (viewCart, addToCart, addMultipleToCart, removeFromCart, checkout) and you do NOT yet know their userId, immediately respond with exactly:
-"Hi there! I don't yet know who you are. Please provide your userId (any short, unique string) so I can keep track of your cart."
-Do NOT perform any tool call or discuss the cart before the user supplies a valid userId. Once they reply with a nonempty string (for example, "My userId is alice123" or simply "alice123"), record that as userId = "alice123" and proceed.
-
-If the user asks a general inventory question (e.g. "What items are available in stock?" or "How much does a banana cost?"), you may answer directly in plain English without asking for a userId.
-
-After you have recorded a valid userId, use it in every cart-related tool call:
-
-• If the user asks "What items do I have in my cart?" or "How many <item> do I have?":
-
-Call the viewCart tool with that userId. Example:
-<tool name="viewCart">
-{"schema":{"userId":"alice123"}}
-</tool>
-
-Wait for the JSON response (an array of {"id","name","price","quantity"} objects).
-
-Present a concise English response reflecting the live data (e.g. "You have 6 apples and 3 loaves of bread.").
-
-• If the user says "Remove 4 apples from my cart":
-
-Call viewCart first with the known userId to check how many apples they have:
-<tool name="viewCart">
-{"schema":{"userId":"alice123"}}
-</tool>
-
-When viewCart returns, let quantityInCart = the returned quantity for "apple."
-– If quantityInCart ≥ 4, emit:
-<tool name="removeFromCart">
-{"schema":{"userId":"alice123","itemId":"apple","quantity":4}}
-</tool>
-– Otherwise, respond: "You only have X apples in your cart, so you cannot remove 4."
-
-• If the user says "Add 2 apples and 1 candy bar to my cart":
-<tool name="addMultipleToCart">
-{"schema":{"userId":"alice123","items":[{"id":"apple","quantity":2},{"id":"candy","quantity":1}]}}
-</tool>
-After the tool returns, reply: "Your items have been successfully added to your cart."
-
-• If the user says "Checkout" (or "I'd like to pay now"):
-<tool name="checkout">
-{"schema":{"userId":"alice123"}}
-</tool>
-Once checkout succeeds, reply: "Your order has been placed. Thank you!"
-
-If at any point the user states "My userId changed to bob456," accept "bob456" as the new userId and use it for all future tool calls. Do not ask for it again unless they explicitly change it.
-
-Always remain friendly, concise, and accurate. Do not guess or fabricate a userId—only proceed with cart operations once the user has explicitly provided it.
-
-
-
-`,
+          system: systemPrompt,
           messages: processedMessages,
           tools: allTools,
           onFinish: async (args) => {
@@ -17691,9 +17676,7 @@ Always remain friendly, concise, and accurate. Do not guess or fabricate a userI
             );
             await this.mcp.closeConnection(mcpConnection.id);
           },
-          onError: (error) => {
-            console.error("Error while streaming:", error);
-          },
+          onError: (error) => console.error("Error while streaming:", error),
           maxSteps: 10
         });
         result.mergeIntoDataStream(dataStream);
@@ -17714,40 +17697,22 @@ Always remain friendly, concise, and accurate. Do not guess or fabricate a userI
   }
 }
 const server = {
-  async fetch(request, env2, ctx) {
+  async fetch(request, env2) {
     const url = new URL(request.url);
     const userId = url.searchParams.get("userId");
-    if (!userId && url.pathname.startsWith("/chat")) {
-      return Response.redirect("/login", 302);
-    }
-    if (url.pathname.startsWith("/chat") && userId) {
-      const newUrl = new URL(
-        `/agents/Chat/${encodeURIComponent(userId)}`,
-        url.origin
-      );
-      url.searchParams.forEach((v, k) => {
-        if (k !== "userId") newUrl.searchParams.set(k, v);
-      });
-      return fetch(newUrl.toString(), request);
-    }
-    if (url.pathname === "/check-open-ai-key") {
-      const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
-      return Response.json({
-        success: hasOpenAIKey
-      });
-    }
-    if (!process.env.OPENAI_API_KEY) {
-      console.error(
-        "OPENAI_API_KEY is not set, don't forget to set it locally in .dev.vars, and use `wrangler secret bulk .dev.vars` to upload it to production"
-      );
-    }
-    if (env2.ASSETS) {
+    if (url.pathname === "/" || url.pathname === "/login") {
       return env2.ASSETS.fetch(request);
     }
-    return (
-      // Route the request to our agent or return 404 if not found
-      await routeAgentRequest(request, env2) || new Response("Not found", { status: 404 })
-    );
+    if (url.pathname === "/chat" && userId) {
+      return env2.ASSETS.fetch(request);
+    }
+    if (url.pathname === "/chat" && !userId) {
+      return Response.redirect("/login", 302);
+    }
+    if (url.pathname === "/check-open-ai-key") {
+      return Response.json({ success: !!process.env.OPENAI_API_KEY });
+    }
+    return await routeAgentRequest(request, env2) || new Response("Not found", { status: 404 });
   }
 };
 export {
