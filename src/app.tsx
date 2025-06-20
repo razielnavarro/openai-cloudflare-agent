@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, use } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "agents/ai-react";
 import type { Message } from "@ai-sdk/react";
@@ -90,7 +90,7 @@ function Chat() {
   };
 
   const agent = useAgent({
-    agent: "chat",
+    agent: "myagent",
     name: userId,
   });
 
@@ -396,14 +396,32 @@ function Chat() {
   );
 }
 
-const hasOpenAiKeyPromise = fetch("/check-open-ai-key").then((res) =>
-  res.json<{ success: boolean }>()
-);
-
 function HasOpenAIKey() {
-  const hasOpenAiKey = use(hasOpenAiKeyPromise);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState<{ success: boolean } | null>(
+    null
+  );
+  const [isLoading, setIsLoading] = useState(true);
 
-  if (!hasOpenAiKey.success) {
+  useEffect(() => {
+    fetch("/check-open-ai-key")
+      .then((res) => res.json<{ success: boolean }>())
+      .then((data) => {
+        setHasOpenAiKey(data);
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        console.error("Failed to check OpenAI key:", error);
+        setHasOpenAiKey({ success: false });
+        setIsLoading(false);
+      });
+  }, []);
+
+  // Don't render anything while loading
+  if (isLoading) {
+    return null;
+  }
+
+  if (!hasOpenAiKey?.success) {
     return (
       <div className="fixed top-0 left-0 right-0 z-50 bg-red-500/10 backdrop-blur-sm">
         <div className="max-w-3xl mx-auto p-4">

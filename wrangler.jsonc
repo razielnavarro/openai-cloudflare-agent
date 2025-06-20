@@ -17,7 +17,7 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "chat",
+        "name": "myagent",
         "class_name": "Chat",
       },
     ],
@@ -53,7 +53,10 @@
    * Environment Variables
    * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
    */
-  // "vars": { "MY_VARIABLE": "production_value" },
+  "vars": {
+    "INVENTORY_MCP_SERVER_URL": "http://127.0.0.1:8788/sse",
+    "CART_MCP_SERVER_URL": "http://127.0.0.1:8789/sse",
+  },
   /**
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/

@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+            // Force the browser version of the `debug` package so it doesn't try to access
+      // Node-specific properties like `process.stderr.fd` when running inside
+      // Cloudflare Workers/Miniflare.
+      debug: "debug/src/browser.js",
     },
   },
   build: {
