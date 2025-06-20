@@ -53,10 +53,7 @@
    * Environment Variables
    * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
    */
-  "vars": {
-    "INVENTORY_MCP_SERVER_URL": "http://127.0.0.1:8788/sse",
-    "CART_MCP_SERVER_URL": "http://127.0.0.1:8789/sse",
-  },
+  // "vars": { "MY_VARIABLE": "production_value" },
   /**
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/
