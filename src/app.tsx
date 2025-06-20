@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "agents/ai-react";
 import type { Message } from "@ai-sdk/react";
-import type { tools } from "./tools";
+import type { tools } from "./tools.ts";
 import {
   BrowserRouter,
   Routes,
